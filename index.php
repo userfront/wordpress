@@ -60,11 +60,13 @@ function redirect($url, $permanent = false)
 }
 
 // Delete a cookie
-function delete_cookie($cookieName)
+function delete_cookie($cookieName, $useRealCookieName = true)
 {
-	unset($_COOKIE[$cookieName]);
-	// We need the real cookie name, not the sanitized version
-	$realCookieName = str_replace("_", ".", $cookieName);
+	if (isset($_COOKIE[$cookieName])) {
+		unset($_COOKIE[$cookieName]);
+	}
+
+	$realCookieName = $useRealCookieName ? str_replace("_", ".", $cookieName) : $cookieName;
 	if ($realCookieName && is_string($realCookieName)) {
 		setcookie($realCookieName, "", time() - 3600, "/");
 	}
@@ -73,6 +75,7 @@ function delete_cookie($cookieName)
 // Get the self object from Userfront
 function get_self($jwt)
 {
+	// TODO: Use jwt.verify instead
 	$url = "https://api.userfront.com/v0/self";
 	$data = fetch($url, "GET", false, array("Authorization: Bearer " . $jwt));
 	return json_decode($data);
@@ -193,7 +196,6 @@ function wp_delete_table()
 /**
  * Hooks
  */
-
 // Fires after WordPress has finished loading but before any headers are sent
 add_action('init', 'init');
 function init()
@@ -203,35 +205,69 @@ function init()
 	);
 
 	if (isset($tenantId)) {
+		$isPantheon = isset($_ENV['PANTHEON_ENVIRONMENT']);
+		$cookiePrefix = $isPantheon ? "STYXKEY_" : "";
 
-		$accessCookie = "access_" . $tenantId;
-		$idCookie = "id_" . $tenantId;
-		$refreshCookie = "refresh_" . $tenantId;
+		$userfrontAccessCookie = "access_" . $tenantId;
+		$accessCookie = $cookiePrefix . $userfrontAccessCookie;
+		$userfrontIdCookie = "id_" . $tenantId;
+		$idCookie = $cookiePrefix . $userfrontIdCookie;
+		$userfrontRefreshCookie = "refresh_" . $tenantId;
+		$refreshCookie = $cookiePrefix . $userfrontRefreshCookie;
 
-		$isLoginRoute = str_starts_with(
+		$isLoggedIntoUserfront = isset($_COOKIE[$accessCookie]) && isset($_COOKIE[$idCookie]) && isset($_COOKIE[$refreshCookie]);
+
+		$isWpLoginRoute = str_starts_with(
 			$_SERVER["REQUEST_URI"],
 			"/wp-login.php"
 		);
+		$isLoginRoute = str_starts_with(
+			$_SERVER["REQUEST_URI"],
+			"/login"
+		);
+		$isPostLoginRoute = str_starts_with(
+			$_SERVER["REQUEST_URI"],
+			"/post-login"
+		);
 		$isLogoutAction = isset($_GET["action"]) && $_GET["action"] == "logout";
 
-		if (
-			$isLoginRoute
-			&&
-			$isLogoutAction
-		) {
-			delete_cookie($accessCookie);
-			delete_cookie($idCookie);
-			delete_cookie($refreshCookie);
+		if ($isPantheon && $isPostLoginRoute) {
+			echo '<script type="text/javascript">
+				function updateCookies() {
+					const cookies = document.cookie.split("; ").reduce((prev, current) => {
+						const [name, ...value] = current.split("=");
+						prev[name] = value.join("=");
+						return prev;
+					}, {});
+					["id", "refresh", "access"].forEach(key => document.cookie = "STYXKEY_" + key + "_' . $tenantId . '=" + cookies[key + ".' . $tenantId . '"]);
+					window.location.href = "/dashboard";
+				}
+				updateCookies();
+			</script>';
+			die();
+		}
+
+		if (($isLoginRoute || $isWpLoginRoute) && $isLogoutAction) {
+			delete_cookie($userfrontAccessCookie);
+			delete_cookie($userfrontIdCookie);
+			delete_cookie($userfrontRefreshCookie);
+
+			delete_cookie($accessCookie, false);
+			delete_cookie($idCookie, false);
+			delete_cookie($refreshCookie, false);
 
 			wp_logout();
 
 			die();
+			// Uncomment to disable the WordPress login page
+			// } elseif ($isWpLoginRoute) {
+			// redirect("/login");
 		}
 
 		$isLoggedIn = is_user_logged_in();
 
 		if (
-			!$isLoggedIn && isset($_COOKIE[$accessCookie]) && isset($_COOKIE[$idCookie]) && isset($_COOKIE[$refreshCookie])
+			!$isLoggedIn && $isLoggedIntoUserfront
 		) {
 			$self = get_self(
 				$_COOKIE[$accessCookie]
@@ -276,9 +312,10 @@ function init()
 					wp_set_current_user($wpUserId);
 					wp_set_auth_cookie($wpUserId, true);
 				}
+			}
 
-				$redirectQuery = $_GET["redirect_to"];
-				if ($redirectQuery) {
+			if ($isLoginRoute && !$isPantheon) {
+				if (isset($_GET["redirect_to"])) {
 					redirect($_GET["redirect_to"]);
 				} else {
 					redirect("/dashboard");
@@ -293,8 +330,7 @@ add_action('wp_logout', 'logout');
 function logout()
 {
 	// Redirect to Userfront login page
-	$userfrontLogin = str_replace("/wp-login.php", "/login", $_SERVER["REQUEST_URI"]);
-	redirect($userfrontLogin);
+	redirect("/login");
 }
 
 // Fires as an admin screen or script is being initialized
@@ -361,6 +397,8 @@ function add_admin_menu_page()
 }
 function display_userfront_menu_page()
 {
+	$isPantheon = isset($_ENV['PANTHEON_ENVIRONMENT']);
+
 	// Event listener for the plugin settings
 	if (isset($_GET['settings-updated']) && $_GET['settings-updated'] === "true") {
 		$tenantId = get_option(
@@ -372,7 +410,7 @@ function display_userfront_menu_page()
 			wp_update_post(
 				array(
 					"ID" => $value->loginPageId,
-					"post_content" => '<login-form tenant-id="' . $tenantId . '"></login-form><script src="https://cdn.userfront.com/@userfront/toolkit@latest/dist/web-component.umd.js"></script>'
+					"post_content" => '<login-form tenant-id="' . $tenantId . '"' . ($isPantheon ? ' redirect="/post-login" redirect-on-load-if-logged-in="true"' : '') . '></login-form><script src="https://cdn.userfront.com/@userfront/toolkit@latest/dist/web-component.umd.js"></script>'
 				)
 			);
 			wp_update_post(
