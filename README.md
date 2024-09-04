@@ -55,6 +55,6 @@ If you make customizations to your toolkit theme and appearance in the [Userfron
 
 If you're experiencing miscellaneous issues with the render and behavior of this plugin, try to disable other plugins as there could be conflicts between them.
 
-The automatically generated Login page could be effected by your permalink structure. This could break Login Links via email if your permalink structure involves a redirect because WordPress will drop any query parameters, including the required `uuid` and `token`. Try changing the permalink structure to `/%postname%/` in your WordPress Admin Dashboard under Permalink Settings > Permalink structure. 
+The automatically generated Login page could be effected by your permalink structure. This could break Login Links via email if your permalink structure involves a redirect because WordPress will drop any query parameters, including the required `uuid` and `token`. Try changing the permalink structure to `/%postname%/` in your WordPress Admin Dashboard under Settings > Permalink Settings > Permalink structure. 
 
 If this is not an option for you or if you're you experiencing other problems, please [contact us](https://userfront.com/contact).
