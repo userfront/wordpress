@@ -15,7 +15,7 @@ Upload and activate this plugin to use Userfront with your WordPress website. In
 ## Getting Started
 
 ### Installation
-[Step-by-step Instructions](https://userfront.notion.site/WordPress-Plugin-a84b98f821434ce899b7226f6d8ef69d?pvs=4)
+[Step-by-step Instructions](https://userfront.com/docs/integrations/wordpress)
 
 ### Activation
 When this plugin is activated, 3 new pages are created automatically:
