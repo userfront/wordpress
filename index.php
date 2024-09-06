@@ -435,7 +435,7 @@ function add_admin_settings()
 
 	add_settings_field(
 		'userfront-redirect-checkbox',
-		'Redirect wp-login.php to /login',
+		'Redirect /wp-login.php to /login',
 		'display_redirect_checkbox',
 		'userfront-options-page',
 		'userfront-settings',
