@@ -22,31 +22,45 @@
 // Fetch data from a URL
 function fetch($url, $method, $data = false, $headers = array())
 {
-	$curl = curl_init();
+	$ch = curl_init();
 
 	switch ($method) {
 		case "POST":
-			curl_setopt($curl, CURLOPT_POST, 1);
+			curl_setopt($ch, CURLOPT_POST, 1);
+			if ($data) {
+				curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+			}
+			break;
 
-			if ($data)
-				curl_setopt($curl, CURLOPT_POSTFIELDS, $data);
-			break;
 		case "PUT":
-			curl_setopt($curl, CURLOPT_PUT, 1);
+			curl_setopt($ch, CURLOPT_PUT, 1);
+			curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PUT');
+			if ($data) {
+				curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+			}
 			break;
+
+		case "DELETE":
+			curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "DELETE");
+			if ($data) {
+				curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+			}
+			break;
+
 		default:
-			if ($data)
+			if ($data) {
 				$url = sprintf("%s?%s", $url, http_build_query($data));
+			}
 	}
 
-	curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
+	curl_setopt($ch, CURLOPT_HTTPHEADER, array_merge($headers, array('Content-Type: application/json')));
 
-	curl_setopt($curl, CURLOPT_URL, $url);
-	curl_setopt($curl, CURLOPT_RETURNTRANSFER, 1);
+	curl_setopt($ch, CURLOPT_URL, $url);
+	curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 
-	$result = curl_exec($curl);
+	$result = curl_exec($ch);
 
-	curl_close($curl);
+	curl_close($ch);
 
 	return $result;
 }
@@ -78,6 +92,13 @@ function get_self($jwt)
 	// TODO: Use jwt.verify instead
 	$url = "https://api.userfront.com/v0/self";
 	$data = fetch($url, "GET", false, array("Authorization: Bearer " . $jwt));
+	return json_decode($data);
+}
+function update_self($jwt, $data)
+{
+	$url = "https://api.userfront.com/v0/self";
+	$data_json = json_encode($data);
+	$data = fetch($url, "PUT", $data_json, array("Authorization: Bearer " . $jwt));
 	return json_decode($data);
 }
 
@@ -203,6 +224,12 @@ function init()
 	$tenantId = get_option(
 		'userfront-tenantId'
 	);
+	$sourceOfTruth = get_option(
+		'userfront-sourceOfTruth'
+	);
+	$redirectLogin = get_option(
+		'userfront-redirect'
+	);
 
 	if (isset($tenantId)) {
 		$isPantheon = isset($_ENV['PANTHEON_ENVIRONMENT']);
@@ -259,9 +286,8 @@ function init()
 			wp_logout();
 
 			die();
-			// Uncomment to disable the WordPress login page
-			// } elseif ($isWpLoginRoute) {
-			// redirect("/login");
+		} elseif ($redirectLogin && $isWpLoginRoute) {
+			redirect("/login");
 		}
 
 		$isLoggedIn = is_user_logged_in();
@@ -272,32 +298,55 @@ function init()
 			$self = get_self(
 				$_COOKIE[$accessCookie]
 			);
+			$name = explode(" ", $self->name);
+			$firstName = $name[0];
+			$lastName = $name[count($name) - 1];
 
 			if (isset($self) && property_exists($self, "email")) {
 				// Search for the user by email
 				$user = get_user_by('email', $self->email);
 
 				if ($user) {
-					// Update the WordPress user
-					$wpUserId = wp_insert_user(
-						array(
-							"ID" => $user->ID,
-							"user_login" => $self->username,
-							"user_email" => $self->email,
-						)
-					);
+					if ($sourceOfTruth === "userfront") {
+						// Update the WordPress user
+						$wpUserId = wp_insert_user(
+							array(
+								"ID" => $user->ID,
+								"first_name" => $firstName,
+								"last_name" => $lastName,
+								"display_name" => $self->name,
+								"user_login" => $self->username,
+								"user_email" => $self->email,
+							)
+						);
 
-					update_user(
-						$tenantId,
-						$self,
-						$wpUserId
-					);
-					wp_set_current_user($wpUserId);
-					wp_set_auth_cookie($wpUserId, true);
+						update_user(
+							$tenantId,
+							$self,
+							$wpUserId
+						);
+					} else if ($sourceOfTruth === "wordpress") {
+						$hasName = $user->first_name && $user->last_name;
+						$wpUserName = $user->first_name . " " . $user->last_name;
+						// Update the Userfront user
+						update_self(
+							$_COOKIE[$accessCookie],
+							array(
+								"username" => $user->user_login,
+								"name" => $hasName ? $wpUserName : "",
+							)
+						);
+					}
+
+					wp_set_current_user($user->ID);
+					wp_set_auth_cookie($user->ID, true);
 				} else {
 					// Insert a new WordPress user
 					$wpUserId = wp_insert_user(
 						array(
+							"first_name" => $firstName,
+							"last_name" => $lastName,
+							"display_name" => $self->name,
 							"user_login" => $self->username,
 							"user_email" => $self->email,
 							"user_pass" => wp_generate_password(),
@@ -309,6 +358,7 @@ function init()
 						$self,
 						$wpUserId
 					);
+
 					wp_set_current_user($wpUserId);
 					wp_set_auth_cookie($wpUserId, true);
 				}
@@ -364,6 +414,42 @@ function add_admin_settings()
 			"description" => "The tenant ID for your Userfront account",
 		]
 	);
+
+	add_settings_field(
+		'userfront-sourceOfTruth-checkbox',
+		'Source of Truth',
+		'display_source_of_truth_checkbox',
+		'userfront-options-page',
+		'userfront-settings',
+	);
+
+	register_setting(
+		"userfront",
+		"userfront-sourceOfTruth",
+		[
+			"type" => "string",
+			"label" => "Source of Truth",
+			"description" => "Use Userfront as the source of truth for user data",
+		]
+	);
+
+	add_settings_field(
+		'userfront-redirect-checkbox',
+		'Redirect wp-login.php to /login',
+		'display_redirect_checkbox',
+		'userfront-options-page',
+		'userfront-settings',
+	);
+
+	register_setting(
+		"userfront",
+		"userfront-redirect",
+		[
+			"type" => "boolean",
+			"label" => "Redirect /wp-login.php to /login",
+			"description" => "Redirect the WordPress login page to the Userfront login page",
+		]
+	);
 }
 function display_userfront_settings_message()
 {
@@ -375,6 +461,24 @@ function display_userfront_tenant_field()
 		'userfront-tenantId'
 	);
 	echo '<input type="text" id="userfront-tenantId" name="userfront-tenantId" value="' . $value . '" />';
+}
+function display_source_of_truth_checkbox()
+{
+	$value = get_option(
+		'userfront-sourceOfTruth'
+	);
+	echo '<select id="userfront-sourceOfTruth" name="userfront-sourceOfTruth">
+	<option value="userfront" ' . ($value === "userfront" ? "selected" : "") . '>Userfront</option>
+		<option value="wordpress" ' . ($value === "wordpress" ? "selected" : "") . '>WordPress</option>
+		<option value="null" ' . ($value === "null" ? "selected" : "") . '>Do nothing</option>
+	</select>';
+}
+function display_redirect_checkbox()
+{
+	$value = get_option(
+		'userfront-redirect'
+	);
+	echo '<input type="checkbox" id="userfront-redirect" name="userfront-redirect" ' . ($value ? "checked" : "") . ' />';
 }
 
 // Fires before the administration menu loads in the admin
@@ -501,6 +605,8 @@ function deactivation_hook()
 {
 	// Delete the options
 	delete_option('userfront-tenantId');
+	delete_option('userfront-sourceOfTruth');
+	delete_option('userfront-redirect');
 	// Delete the pages
 	$values = wp_select_records_from_table();
 	foreach ($values as $value) {
