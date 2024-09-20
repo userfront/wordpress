@@ -342,7 +342,8 @@ function init()
 					wp_set_auth_cookie($user->ID, true);
 				} else {
 					$isCreateAccountEnabled = get_option(
-						'userfront-account-creation'
+						'userfront-account-creation',
+						true
 					);
 					if ($isCreateAccountEnabled) {
 						// Insert a new WordPress user
@@ -520,7 +521,7 @@ function add_admin_settings()
 
 	add_settings_field(
 		'userfront-account-creation-checkbox',
-		esc_html__('Require a WordPress account', 'userfront-account-creation') .
+		esc_html__('Create a WordPress account', 'userfront-account-creation') .
 		'<p class="description">' . esc_html__('After login or signup, create a new WordPress account. When disabled, block access.', 'userfront-account-creation') . '</p>',
 		'display_account_creation_checkbox',
 		'userfront-options-page',
@@ -532,7 +533,7 @@ function add_admin_settings()
 		"userfront-account-creation",
 		[
 			"type" => "boolean",
-			"label" => "Require a WordPress account",
+			"label" => "Create a WordPress account",
 			"description" => "After login or signup of a new user, create a new WordPress account with Userfront data",
 		]
 	);
@@ -593,7 +594,8 @@ function display_redirect_checkbox()
 function display_account_creation_checkbox()
 {
 	$value = get_option(
-		'userfront-account-creation'
+		'userfront-account-creation',
+		true
 	);
 	echo '<input type="checkbox" id="userfront-account-creation" name="userfront-account-creation" ' . ($value ? "checked" : "") . ' />';
 }
