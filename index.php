@@ -7,7 +7,7 @@
  * @version 1.0.0
  * 
  * @wordpress-plugin
- * Plugin Name: Userfront Authentication
+ * Plugin Name: Userfront Auth
  * Plugin URI: https://github.com/userfront/wordpress
  * Description: Userfront is a premier auth & identity platform. Install full-fledged authentication and authorization with 2FA/MFA and OAuth to WordPress within minutes. 
  * Author: Userfront 
@@ -229,7 +229,7 @@ function init()
 	);
 	$redirectLogin = get_option(
 		'userfront-redirect'
-	);
+	) && !isset($_GET["bypass"]);
 
 	if (isset($tenantId)) {
 		$isPantheon = isset($_ENV['PANTHEON_ENVIRONMENT']);
@@ -341,26 +341,33 @@ function init()
 					wp_set_current_user($user->ID);
 					wp_set_auth_cookie($user->ID, true);
 				} else {
-					// Insert a new WordPress user
-					$wpUserId = wp_insert_user(
-						array(
-							"first_name" => $firstName,
-							"last_name" => $lastName,
-							"display_name" => $self->name,
-							"user_login" => $self->username,
-							"user_email" => $self->email,
-							"user_pass" => wp_generate_password(),
-						)
+					$isCreateAccountEnabled = get_option(
+						'userfront-account-creation'
 					);
+					if ($isCreateAccountEnabled) {
+						// Insert a new WordPress user
+						$wpUserId = wp_insert_user(
+							array(
+								"first_name" => $firstName,
+								"last_name" => $lastName,
+								"display_name" => $self->name,
+								"user_login" => $self->username,
+								"user_email" => $self->email,
+								"user_pass" => wp_generate_password(),
+							)
+						);
 
-					update_user(
-						$tenantId,
-						$self,
-						$wpUserId
-					);
+						update_user(
+							$tenantId,
+							$self,
+							$wpUserId
+						);
 
-					wp_set_current_user($wpUserId);
-					wp_set_auth_cookie($wpUserId, true);
+						wp_set_current_user($wpUserId);
+						wp_set_auth_cookie($wpUserId, true);
+					} else {
+						redirect("/login?error=no-wordpress-user");
+					}
 				}
 			}
 
@@ -398,8 +405,9 @@ function add_admin_settings()
 	);
 
 	add_settings_field(
-		'userfront-input-field',
-		'Tenant ID',
+		'userfront-tenantId-input-field',
+		esc_html__('Tenant ID', 'userfront-tenantId') .
+		'<p class="description">' . esc_html__('Use the Tenant ID found in the', 'userfront-tenantId') . ' <a href="https://userfront.com/test/dashboard/tenants" target="_blank">Userfront dashboard</a>.</p>',
 		'display_userfront_tenant_field',
 		'userfront-options-page',
 		'userfront-settings',
@@ -416,8 +424,66 @@ function add_admin_settings()
 	);
 
 	add_settings_field(
+		'userfront-login-checkbox',
+		esc_html__('Login', 'userfront-login') .
+		'<p class="description">' . esc_html__('Visitors may authenticate with Userfront.', 'userfront-login') . '</p>',
+		'display_login_checkbox',
+		'userfront-options-page',
+		'userfront-settings',
+	);
+
+	register_setting(
+		"userfront",
+		"userfront-login",
+		[
+			"type" => "boolean",
+			"label" => "Login",
+			"description" => "Visitors may authenticate with Userfront",
+		]
+	);
+
+	add_settings_field(
+		'userfront-signup-checkbox',
+		esc_html__('Signup', 'userfront-signup') .
+		'<p class="description">' . esc_html__('Visitors may create a new Userfront account.', 'userfront-signup') . '</p>',
+		'display_signup_checkbox',
+		'userfront-options-page',
+		'userfront-settings',
+	);
+
+	register_setting(
+		"userfront",
+		"userfront-signup",
+		[
+			"type" => "boolean",
+			"label" => "Signup",
+			"description" => "Visitors may create a new Userfront account",
+		]
+	);
+
+	add_settings_field(
+		'userfront-reset-password-checkbox',
+		esc_html__('Reset Password', 'userfront-reset-password') .
+		'<p class="description">' . esc_html__('Visitors may reset their passwords.', 'userfront-reset-password') . '</p>',
+		'display_reset_password_checkbox',
+		'userfront-options-page',
+		'userfront-settings',
+	);
+
+	register_setting(
+		"userfront",
+		"userfront-reset-password",
+		[
+			"type" => "boolean",
+			"label" => "Reset Password",
+			"description" => "Visitors may reset their passwords",
+		]
+	);
+
+	add_settings_field(
 		'userfront-sourceOfTruth-checkbox',
-		'Source of Truth',
+		esc_html__('Source of truth', 'userfront-sourceOfTruth') .
+		'<p class="description">' . esc_html__('Overwrite user data such as first name, last name, and username from this source.', 'userfront-sourceOfTruth') . '</p>',
 		'display_source_of_truth_checkbox',
 		'userfront-options-page',
 		'userfront-settings',
@@ -435,7 +501,8 @@ function add_admin_settings()
 
 	add_settings_field(
 		'userfront-redirect-checkbox',
-		'Redirect /wp-login.php to /login',
+		esc_html__('Redirect /wp-login.php to /login', 'userfront-redirect') .
+		'<p class="description">' . esc_html__('Use /wp-login.php?bypass to disable.', 'userfront-redirect') . '</p>',
 		'display_redirect_checkbox',
 		'userfront-options-page',
 		'userfront-settings',
@@ -450,17 +517,60 @@ function add_admin_settings()
 			"description" => "Redirect the WordPress login page to the Userfront login page",
 		]
 	);
+
+	add_settings_field(
+		'userfront-account-creation-checkbox',
+		esc_html__('Require a WordPress account', 'userfront-account-creation') .
+		'<p class="description">' . esc_html__('After login or signup, create a new WordPress account. When disabled, block access.', 'userfront-account-creation') . '</p>',
+		'display_account_creation_checkbox',
+		'userfront-options-page',
+		'userfront-settings',
+	);
+
+	register_setting(
+		"userfront",
+		"userfront-account-creation",
+		[
+			"type" => "boolean",
+			"label" => "Require a WordPress account",
+			"description" => "After login or signup of a new user, create a new WordPress account with Userfront data",
+		]
+	);
 }
 function display_userfront_settings_message()
 {
-	echo 'Use the Tenant ID found in the <a href="https://userfront.com/test/dashboard/tenants" target="_blank">Userfront dashboard</a>.';
+	echo '';
 }
 function display_userfront_tenant_field()
 {
 	$value = get_option(
 		'userfront-tenantId'
 	);
-	echo '<input type="text" id="userfront-tenantId" name="userfront-tenantId" value="' . $value . '" />';
+	echo '<input type="text" id="userfront-tenantId" name="userfront-tenantId" value="' . $value . '" class="regular-text" />';
+}
+function display_login_checkbox()
+{
+	$value = get_option(
+		'userfront-login',
+		true
+	);
+	echo '<input type="checkbox" id="userfront-login" name="userfront-login" ' . ($value ? "checked" : "") . ' />';
+}
+function display_signup_checkbox()
+{
+	$value = get_option(
+		'userfront-signup',
+		true
+	);
+	echo '<input type="checkbox" id="userfront-signup" name="userfront-signup" ' . ($value ? "checked" : "") . ' />';
+}
+function display_reset_password_checkbox()
+{
+	$value = get_option(
+		'userfront-reset-password',
+		true
+	);
+	echo '<input type="checkbox" id="userfront-reset-password" name="userfront-reset-password" ' . ($value ? "checked" : "") . ' />';
 }
 function display_source_of_truth_checkbox()
 {
@@ -479,6 +589,13 @@ function display_redirect_checkbox()
 		'userfront-redirect'
 	);
 	echo '<input type="checkbox" id="userfront-redirect" name="userfront-redirect" ' . ($value ? "checked" : "") . ' />';
+}
+function display_account_creation_checkbox()
+{
+	$value = get_option(
+		'userfront-account-creation'
+	);
+	echo '<input type="checkbox" id="userfront-account-creation" name="userfront-account-creation" ' . ($value ? "checked" : "") . ' />';
 }
 
 // Fires before the administration menu loads in the admin
@@ -502,37 +619,120 @@ function add_admin_menu_page()
 function display_userfront_menu_page()
 {
 	$isPantheon = isset($_ENV['PANTHEON_ENVIRONMENT']);
+	$success = false;
 
 	// Event listener for the plugin settings
 	if (isset($_GET['settings-updated']) && $_GET['settings-updated'] === "true") {
 		$tenantId = get_option(
 			'userfront-tenantId'
 		);
+		$isLoginEnabled = get_option(
+			'userfront-login',
+			true
+		);
+		$isSignupEnabled = get_option(
+			'userfront-signup',
+			true
+		);
+		$isResetPasswordEnabled = get_option(
+			'userfront-reset-password',
+			true
+		);
 		// Update the login, signup, and reset password pages with the new tenant ID
 		$values = wp_select_records_from_table();
 		foreach ($values as $value) {
-			wp_update_post(
-				array(
-					"ID" => $value->loginPageId,
-					"post_content" => '<login-form tenant-id="' . $tenantId . '"' . ($isPantheon ? ' redirect="/post-login" redirect-on-load-if-logged-in="true"' : '') . '></login-form><script src="https://cdn.userfront.com/@userfront/toolkit@latest/dist/web-component.umd.js"></script>'
-				)
-			);
-			wp_update_post(
-				array(
-					"ID" => $value->signupPageId,
-					"post_content" => '<signup-form tenant-id="' . $tenantId . '"></signup-form><script src="https://cdn.userfront.com/@userfront/toolkit@latest/dist/web-component.umd.js"></script>'
-				)
-			);
-			wp_update_post(
-				array(
-					"ID" => $value->resetPasswordPageId,
-					"post_content" => '<password-reset-form tenant-id="' . $tenantId . '"></password-reset-form><script src="https://cdn.userfront.com/@userfront/toolkit@latest/dist/web-component.umd.js"></script>'
-				)
-			);
+			if ($isLoginEnabled && isset($value->loginPageId)) {
+				// Update the login page with the new tenant ID
+				wp_update_post(
+					array(
+						"ID" => $value->loginPageId,
+						"post_content" => '<div id="userfront-error"></div><login-form tenant-id="' . $tenantId . '"' . ($isPantheon ? ' redirect="/post-login" redirect-on-load-if-logged-in="true"' : '') . '></login-form>'
+					)
+				);
+			} else if ($isLoginEnabled && !isset($value->loginPageId)) {
+				// Insert the login page into the database
+				$value->loginPageId = wp_insert_post(
+					array(
+						'post_title' => wp_strip_all_tags('Login'),
+						'post_content' => '<login-form tenant-id="' . $tenantId . '"' . ($isPantheon ? ' redirect="/post-login" redirect-on-load-if-logged-in="true"' : '') . '></login-form>',
+						'post_status' => 'publish',
+						'post_author' => 1,
+						'post_type' => 'page',
+					)
+				);
+			} else {
+				// Delete the login page
+				wp_delete_post($value->loginPageId, true);
+			}
+			if ($isSignupEnabled && isset($value->signupPageId)) {
+				// Update the signup page with the new tenant ID
+				wp_update_post(
+					array(
+						"ID" => $value->signupPageId,
+						"post_content" => '<signup-form tenant-id="' . $tenantId . '"></signup-form>'
+					)
+				);
+			} else if ($isSignupEnabled && !isset($value->signupPageId)) {
+				// Insert the signup page into the database
+				$value->signupPageId = wp_insert_post(
+					array(
+						'post_title' => wp_strip_all_tags('Signup'),
+						'post_content' => '<signup-form tenant-id="' . $tenantId . '"></signup-form>',
+						'post_status' => 'publish',
+						'post_author' => 1,
+						'post_type' => 'page',
+					)
+				);
+			} else {
+				// Delete the signup page
+				wp_delete_post($value->signupPageId, true);
+			}
+			if ($isResetPasswordEnabled && isset($value->resetPasswordPageId)) {
+				// Update the reset password page with the new tenant ID
+				wp_update_post(
+					array(
+						"ID" => $value->resetPasswordPageId,
+						"post_content" => '<password-reset-form tenant-id="' . $tenantId . '"></password-reset-form>'
+					)
+				);
+			} else if ($isResetPasswordEnabled && !isset($value->resetPasswordPageId)) {
+				// Insert the reset password page into the database
+				$value->resetPasswordPageId = wp_insert_post(
+					array(
+						'post_title' => wp_strip_all_tags('Reset Password'),
+						'post_content' => '<password-reset-form tenant-id="' . $tenantId . '"></password-reset-form>',
+						'post_status' => 'publish',
+						'post_author' => 1,
+						'post_type' => 'page',
+					)
+				);
+			} else {
+				// Delete the reset password page
+				wp_delete_post($value->resetPasswordPageId, true);
+			}
 		}
+
+		// Save the page IDs to the database
+		wp_update_record_in_table(
+			$isLoginEnabled ? $value->loginPageId : null,
+			$isSignupEnabled ? $value->signupPageId : null,
+			$isResetPasswordEnabled ? $value->resetPasswordPageId : null
+		);
+
+		$success = true;
 	}
 
+	echo '<div class="wrap">';
 	echo "<h1>Userfront Authentication</h1>";
+
+	if ($isPantheon) {
+		echo '<div class="notice notice-warning update-nag inline"><strong>Pantheon-mode Enabled</strong><br />Behavior is adjusted for cache-busting cookies.<br /><a href="https://docs.pantheon.io/cookies" target="_blank">Learn more about Working with Cookies on Pantheon.</a></div>';
+	}
+
+	if ($success) {
+		echo '<div class="notice notice-success is-dismissible"><p>Settings saved successfully.</p></div>';
+	}
+
 	echo '<form method="post" action="options.php">';
 
 	do_settings_sections(
@@ -545,6 +745,7 @@ function display_userfront_menu_page()
 	submit_button();
 
 	echo '</form>';
+	echo '</div>';
 }
 
 // Fires after a plugin has been activated
@@ -617,3 +818,13 @@ function deactivation_hook()
 	// Delete the database table
 	wp_delete_table();
 }
+
+function enqueue_userfront_script()
+{
+	wp_register_script('userfront-toolkit', 'https://cdn.userfront.com/@userfront/toolkit@latest/dist/web-component.umd.js', [], null, true);
+	wp_enqueue_script('userfront-toolkit');
+	wp_register_script('userfront-wordpress', plugins_url('js/userfront.js', __FILE__), ['jquery'], '1.0', true);
+	wp_enqueue_script('userfront-wordpress');
+}
+
+add_action('wp_enqueue_scripts', 'enqueue_userfront_script');

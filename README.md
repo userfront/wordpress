@@ -8,34 +8,46 @@
 
 # Wordpress Plugin
 
-Upload and activate this plugin to use Userfront with your WordPress website. Introduce new features such as multi-tenacy, social sign-on, role-based access control, and so much more. 
+Upload and activate this plugin to use Userfront with your WordPress website. Introduce new features such as multi-tenacy, social sign-on, role-based access control, and so much more.
 
 [Learn more about Userfront.](https://userfront.com)
 
 ## Getting Started
 
 ### Installation
+
 [Step-by-step Instructions](https://userfront.com/docs/integrations/wordpress)
 
 ### Activation
+
 When this plugin is activated, 3 new pages are created automatically:
+
 - Login
 - Signup
 - Reset Password
 
-After you add your workspace ID to the Userfront Plugin Settings in your WordPress Admin dashboard, these pages are populated with a default Toolkit HTML script.
+After you add your workspace ID, these pages are updated with the Toolkit HTML script. When you enable or disable one of these features, the corresponding pages will be created or deleted upon save.
+
+## Login
+
+### Redirect
+
+You may redirect visitors from `/wp-login.php` to `/login`. Use `/wp-login.php?bypass` to skip the redirect and access the WordPress login.
+
+### Require a WordPress account
+
+If a user does not exist in WordPress, after login or signup, the plugin will create a new WordPress account with their Userfront information. Disable this feature from the plugin settings to block access to your WordPress website.
 
 ## Logout
 
-There is no logout page, the functionality is working alongside WordPress. Therefore, you can logout a user by sending them to `/wp-login.php?action=logout`. 
+There is no logout page, the functionality is working alongside WordPress. Therefore, you can logout a user by sending them to `/wp-login.php?action=logout`.
 
-## Roles 
+## Roles
 
-Userfront is the source of truth. When a user logs in, their WordPress profile is updated with the most recent data from Userfront.
-
-As of now, this means that when data in Userfront, such as roles, are updated, the user will need to logout and log back in.
+Userfront roles are written into WordPress after login or signup. Users will need to logout and log back in to update their role.
 
 The default roles in Userfront are the same as the WordPress roles:
+
 - **Administrator**: The highest level of permission. Admins have the power to access almost everything.
 - **Editor**: Has access to all posts, pages, comments, categories, and tags, and can upload media.
 - **Author**: Can write, upload media, edit, and publish their own posts.
@@ -45,7 +57,7 @@ The default roles in Userfront are the same as the WordPress roles:
 
 [Learn more about WordPress User Roles.](https://wordpress.com/support/invite-people/user-roles/)
 
-If a role exists in Userfront but does not exist in WordPress, when a user logs in, the role will be created in WordPress and assigned to the user.
+If a role exists in Userfront but does not exist in WordPress, the role will be created in WordPress and assigned to the user after login or signup.
 
 ## Themes and Appearance
 
@@ -55,6 +67,6 @@ If you make customizations to your toolkit theme and appearance in the [Userfron
 
 If you're experiencing miscellaneous issues with the render and behavior of this plugin, try to disable other plugins as there could be conflicts between them.
 
-The automatically generated Login page could be effected by your permalink structure. This could break Login Links via email if your permalink structure involves a redirect because WordPress will drop any query parameters, including the required `uuid` and `token`. Try changing the permalink structure to `/%postname%/` in your WordPress Admin Dashboard under Settings > Permalink Settings > Permalink structure. 
+The automatically generated Login page could be effected by your permalink structure. This could break Login Links via email if your permalink structure involves a redirect because WordPress will drop any query parameters, including the required `uuid` and `token`. Try changing the permalink structure to `/%postname%/` in your WordPress Admin Dashboard under Settings > Permalink Settings > Permalink structure.
 
 If this is not an option for you or if you're you experiencing other problems, please [contact us](https://userfront.com/contact).
