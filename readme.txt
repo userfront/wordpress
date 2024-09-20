@@ -1,13 +1,13 @@
-=== Hello Dolly ===
-Contributors: matt, wordpressdotorg
-Stable tag: 1.7.3
-Tested up to: 6.4
-Requires at least: 4.6
-
-This is not just a plugin, it symbolizes the hope and enthusiasm of an entire generation summed up in two words sung most famously by Louis Armstrong.
+=== Userfront Auth ===
+Tags: authentication, authorization, security, user, account, roles, email, password, multi-factor, single sign-on, social, passwordless, mfa, 2fa, sso, oauth2, openid, saml
+Tested up to: 6.6.2
+Requires at least: 6.6.2
+Requires PHP: 7.4
+License: MIT
+License URI: https://github.com/userfront/wordpress/blob/main/license.txt
+Stable tag: 1.2.0
+Contributors: userfront
 
 == Description ==
 
-This is not just a plugin, it symbolizes the hope and enthusiasm of an entire generation summed up in two words sung most famously by Louis Armstrong: Hello, Dolly. When activated you will randomly see a lyric from <cite>Hello, Dolly</cite> in the upper right of your admin screen on every page.
-
-Thanks to Sanjib Ahmad for the artwork.
+Userfront is a premier auth & identity platform. Install full-fledged authentication and authorization with 2FA/MFA and OAuth to WordPress within minutes. 
