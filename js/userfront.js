@@ -27,9 +27,5 @@ jQuery(document).ready(function ($) {
     $("#userfront-error").css("text-align", "center");
     $("#userfront-error").css("max-width", "24rem");
     $("#userfront-error").text("Account does not exist.");
-    if (typeof Userfront !== "undefined" && Userfront.user.email) {
-      Userfront.logout({ redirect: false });
-      location.reload();
-    }
   }
 });

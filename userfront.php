@@ -258,6 +258,11 @@ function init()
 		);
 		$isLogoutAction = isset($_GET["action"]) && $_GET["action"] == "logout";
 
+		$isCreateAccountEnabled = get_option(
+			'userfront-account-creation',
+			true
+		);
+
 		if ($isPantheon && $isPostLoginRoute) {
 			echo '<script type="text/javascript">
 				function updateCookies() {
@@ -341,10 +346,6 @@ function init()
 					wp_set_current_user($user->ID);
 					wp_set_auth_cookie($user->ID, true);
 				} else {
-					$isCreateAccountEnabled = get_option(
-						'userfront-account-creation',
-						true
-					);
 					if ($isCreateAccountEnabled) {
 						// Insert a new WordPress user
 						$wpUserId = wp_insert_user(
@@ -367,12 +368,20 @@ function init()
 						wp_set_current_user($wpUserId);
 						wp_set_auth_cookie($wpUserId, true);
 					} else {
+						delete_cookie($userfrontAccessCookie);
+						delete_cookie($userfrontIdCookie);
+						delete_cookie($userfrontRefreshCookie);
+
+						delete_cookie($accessCookie, false);
+						delete_cookie($idCookie, false);
+						delete_cookie($refreshCookie, false);
+
 						redirect("/login?error=no-wordpress-user");
 					}
 				}
 			}
 
-			if ($isLoginRoute && !$isPantheon) {
+			if ($isLoginRoute && !$isPantheon && $isCreateAccountEnabled) {
 				if (isset($_GET["redirect_to"])) {
 					redirect($_GET["redirect_to"]);
 				} else {
