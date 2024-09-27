@@ -16,6 +16,14 @@
  * License: MIT
  */
 
+define('DEFAULT_PAGE_CONTENT', 'Add your Workspace ID to <a href="/wp-admin/admin.php?page=userfront" target="_blank">the plugin settings</a> then reload this page. ☺️');
+define('PANTHEON_COOKIE_PREFIX', 'STYXKEY_');
+define('ACCESS_COOKIE_PREFIX', 'access_');
+define('ID_COOKIE_PREFIX', 'id_');
+define('REFRESH_COOKIE_PREFIX', 'refresh_');
+define('NONCE', '_wpnonce');
+define('ACTION', 'update-userfront_options');
+
 /**
  * Helpers
  */
@@ -50,11 +58,11 @@ function get_self($jwt)
 			'Authorization' => 'Bearer ' . $jwt
 		)
 	));
-	return json_decode($data);
+	return isset($data["body"]) ? json_decode($data["body"]) : null;
 }
 function update_self($jwt, $data)
 {
-	$data_json = json_encode($data);
+	$data_json = wp_json_encode($data);
 	$data = wp_remote_request(
 		'https://api.userfront.com/v0/self',
 		array(
@@ -63,7 +71,7 @@ function update_self($jwt, $data)
 			'body' => $data_json,
 		)
 	);
-	return json_decode($data);
+	return isset($data["body"]) ? json_decode($data["body"]) : null;
 }
 
 // Insert a new user into the WordPress database, if it doesn't exist
@@ -104,88 +112,6 @@ function update_user($self, $wpUserId)
 }
 
 /**
- * Userfront database table
- */
-
-// Create
-function wp_create_database_table()
-{
-	global $wpdb;
-
-	$table_name = $wpdb->prefix . 'userfront';
-
-	$charset_collate = $wpdb->get_charset_collate();
-
-	$sql = "CREATE TABLE $table_name (
-        id mediumint(9) NOT NULL AUTO_INCREMENT,
-		loginPageId text DEFAULT NULL,
-		signupPageId text DEFAULT NULL,
-		resetPasswordPageId text DEFAULT NULL,
-        time datetime DEFAULT '0000-00-00 00:00:00' NOT NULL,
-        PRIMARY KEY  (id)
-    ) $charset_collate;";
-
-	require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-	dbDelta($sql);
-}
-
-// Insert
-function wp_insert_record_into_table()
-{
-	global $wpdb;
-
-	$table_name = $wpdb->prefix . 'userfront';
-
-	$wpdb->insert(
-		$table_name,
-		array(
-			'time' => current_time('mysql')
-		)
-	);
-}
-
-// Read
-function wp_select_records_from_table()
-{
-	global $wpdb;
-
-	$table_name = $wpdb->prefix . 'userfront';
-
-	$results = $wpdb->get_results("SELECT * FROM $table_name");
-
-	return $results;
-}
-
-// Update
-function wp_update_record_in_table($loginPageId, $signupPageId, $resetPasswordPageId)
-{
-	global $wpdb;
-
-	$table_name = $wpdb->prefix . 'userfront';
-
-	$wpdb->update(
-		$table_name,
-		array(
-			'loginPageId' => $loginPageId,
-			'signupPageId' => $signupPageId,
-			'resetPasswordPageId' => $resetPasswordPageId,
-			'time' => current_time('mysql')
-		),
-		array('id' => 1)
-	);
-}
-
-// Delete
-function wp_delete_table()
-{
-	global $wpdb;
-
-	$table_name = $wpdb->prefix . 'userfront';
-
-	$wpdb->query("DROP TABLE IF EXISTS $table_name");
-}
-
-/**
  * Hooks
  */
 // Fires after WordPress has finished loading but before any headers are sent
@@ -204,27 +130,29 @@ function init()
 
 	if (isset($workspaceId)) {
 		$isPantheon = isset($_ENV['PANTHEON_ENVIRONMENT']);
-		$cookiePrefix = $isPantheon ? 'STYXKEY_' : '';
+		$cookiePrefix = $isPantheon ? PANTHEON_COOKIE_PREFIX : '';
 
-		$userfrontAccessCookie = 'access_' . $workspaceId;
+		$userfrontAccessCookie = ACCESS_COOKIE_PREFIX . $workspaceId;
 		$accessCookie = $cookiePrefix . $userfrontAccessCookie;
-		$userfrontIdCookie = 'id_' . $workspaceId;
+		$userfrontIdCookie = ID_COOKIE_PREFIX . $workspaceId;
 		$idCookie = $cookiePrefix . $userfrontIdCookie;
-		$userfrontRefreshCookie = 'refresh_' . $workspaceId;
+		$userfrontRefreshCookie = REFRESH_COOKIE_PREFIX . $workspaceId;
 		$refreshCookie = $cookiePrefix . $userfrontRefreshCookie;
 
 		$isLoggedIntoUserfront = isset($_COOKIE[$accessCookie]) && isset($_COOKIE[$idCookie]) && isset($_COOKIE[$refreshCookie]);
 
+		$requestUri = isset($_SERVER['REQUEST_URI']) ? esc_url_raw(wp_unslash($_SERVER['REQUEST_URI'])) : '';
+
 		$isWpLoginRoute = str_starts_with(
-			$_SERVER['REQUEST_URI'],
+			$requestUri,
 			'/wp-login.php'
 		);
 		$isLoginRoute = str_starts_with(
-			$_SERVER['REQUEST_URI'],
+			$requestUri,
 			'/login'
 		);
 		$isPostLoginRoute = str_starts_with(
-			$_SERVER['REQUEST_URI'],
+			$requestUri,
 			'/post-login'
 		);
 		$isLogoutAction = isset($_GET['action']) && $_GET['action'] == 'logout';
@@ -272,9 +200,10 @@ function init()
 			!$isLoggedIn && $isLoggedIntoUserfront
 		) {
 			$self = get_self(
-				$_COOKIE[$accessCookie]
+				sanitize_text_field(wp_unslash($_COOKIE[$accessCookie]))
 			);
-			$name = explode(' ', $self->name);
+			$userfrontName = property_exists($self, 'name') ? $self->name : '';
+			$name = explode(' ', $userfrontName);
 			$firstName = $name[0];
 			$lastName = $name[count($name) - 1];
 
@@ -305,7 +234,7 @@ function init()
 						$wpUserName = $user->first_name . ' ' . $user->last_name;
 						// Update the Userfront user
 						update_self(
-							$_COOKIE[$accessCookie],
+							sanitize_text_field(wp_unslash($_COOKIE[$accessCookie])),
 							array(
 								'username' => $user->user_login,
 								'name' => $hasName ? $wpUserName : '',
@@ -354,7 +283,7 @@ function init()
 
 			if ($isLoginRoute && !$isPantheon && $isCreateAccountEnabled) {
 				if (isset($_GET['redirect_to'])) {
-					redirect($_GET['redirect_to']);
+					redirect(esc_url_raw(wp_unslash($_GET['redirect_to'])));
 				} else {
 					redirect('/dashboard');
 				}
@@ -535,18 +464,18 @@ function add_admin_settings()
 }
 function display_userfront_settings_message()
 {
-	esc_html_e('');
+	echo 'Configure the Userfront plugin settings.';
 }
 function display_userfront_workspace_field()
 {
 	$value = get_option('userfront-workspaceId');
-	echo '<input type="text" id="userfront-workspaceId" name="userfront-workspaceId" value="' . esc_html($value) . '" class="regular-text" />';
+	echo '<input type="text" id="userfront-workspaceId" name="userfront-workspaceId" value="' . esc_attr($value) . '" class="regular-text" />';
 }
 
 function display_userfront_organization_field()
 {
 	$value = get_option('userfront-organizationId');
-	echo '<input type="text" id="userfront-organizationId" name="userfront-organizationId" value="' . esc_html($value) . '" class="regular-text" />';
+	echo '<input type="text" id="userfront-organizationId" name="userfront-organizationId" value="' . esc_attr($value) . '" class="regular-text" />';
 }
 
 function display_login_checkbox()
@@ -607,91 +536,94 @@ function display_userfront_menu_page()
 	$isPantheon = isset($_ENV['PANTHEON_ENVIRONMENT']);
 	$success = false;
 
+	$isSubmission = isset($_GET['settings-updated']) ? $_GET['settings-updated'] == true : false;
+
 	// Event listener for the plugin settings
-	if (isset($_GET['settings-updated']) && $_GET['settings-updated'] === 'true') {
+	if ($isSubmission) {
 		$workspaceId = get_option('userfront-workspaceId');
 		$isLoginEnabled = get_option('userfront-login', true);
 		$isSignupEnabled = get_option('userfront-signup', true);
 		$isResetPasswordEnabled = get_option('userfront-reset-password', true);
-		// Update the login, signup, and reset password pages with the new tenant ID
-		$values = wp_select_records_from_table();
-		foreach ($values as $value) {
-			if ($isLoginEnabled && isset($value->loginPageId)) {
-				// Update the login page with the new tenant ID
-				wp_update_post(
-					array(
-						'ID' => $value->loginPageId,
-						'post_content' => '<div id="userfront-error"></div><login-form tenant-id="' . $workspaceId . '"' . ($isPantheon ? ' redirect="/post-login" redirect-on-load-if-logged-in="true"' : '') . '></login-form>'
-					)
-				);
-			} else if ($isLoginEnabled && !isset($value->loginPageId)) {
-				// Insert the login page into the database
-				$value->loginPageId = wp_insert_post(
-					array(
-						'post_title' => 'Login',
-						'post_content' => '<login-form tenant-id="' . $workspaceId . '"' . ($isPantheon ? ' redirect="/post-login" redirect-on-load-if-logged-in="true"' : '') . '></login-form>',
-						'post_status' => 'publish',
-						'post_author' => 1,
-						'post_type' => 'page',
-					)
-				);
-			} else {
-				// Delete the login page
-				wp_delete_post($value->loginPageId, true);
-			}
-			if ($isSignupEnabled && isset($value->signupPageId)) {
-				// Update the signup page with the new tenant ID
-				wp_update_post(
-					array(
-						'ID' => $value->signupPageId,
-						'post_content' => '<signup-form tenant-id="' . $workspaceId . '"></signup-form>'
-					)
-				);
-			} else if ($isSignupEnabled && !isset($value->signupPageId)) {
-				// Insert the signup page into the database
-				$value->signupPageId = wp_insert_post(
-					array(
-						'post_title' => 'Signup',
-						'post_content' => '<signup-form tenant-id="' . $workspaceId . '"></signup-form>',
-						'post_status' => 'publish',
-						'post_author' => 1,
-						'post_type' => 'page',
-					)
-				);
-			} else {
-				// Delete the signup page
-				wp_delete_post($value->signupPageId, true);
-			}
-			if ($isResetPasswordEnabled && isset($value->resetPasswordPageId)) {
-				// Update the reset password page with the new tenant ID
-				wp_update_post(
-					array(
-						'ID' => $value->resetPasswordPageId,
-						'post_content' => '<password-reset-form tenant-id="' . $workspaceId . '"></password-reset-form>'
-					)
-				);
-			} else if ($isResetPasswordEnabled && !isset($value->resetPasswordPageId)) {
-				// Insert the reset password page into the database
-				$value->resetPasswordPageId = wp_insert_post(
-					array(
-						'post_title' => 'Reset Password',
-						'post_content' => '<password-reset-form tenant-id="' . $workspaceId . '"></password-reset-form>',
-						'post_status' => 'publish',
-						'post_author' => 1,
-						'post_type' => 'page',
-					)
-				);
-			} else {
-				// Delete the reset password page
-				wp_delete_post($value->resetPasswordPageId, true);
-			}
+		$loginPageId = get_option('userfront-login-page-id');
+		$signupPageId = get_option('userfront-signup-page-id');
+		$resetPasswordPageId = get_option('userfront-reset-password-page-id');
 
-			// Save the page IDs to the database
-			wp_update_record_in_table(
-				$isLoginEnabled ? $value->loginPageId : null,
-				$isSignupEnabled ? $value->signupPageId : null,
-				$isResetPasswordEnabled ? $value->resetPasswordPageId : null
+		if ($isLoginEnabled && $loginPageId) {
+			// Update the login page with the new tenant ID
+			wp_update_post(
+				array(
+					'ID' => $loginPageId,
+					'post_content' => $workspaceId ? '<div id="userfront-error"></div><login-form tenant-id="' . $workspaceId . '"' . ($isPantheon ? ' redirect="/post-login" redirect-on-load-if-logged-in="true"' : '') . '></login-form>' : DEFAULT_PAGE_CONTENT
+				)
 			);
+		} else if ($isLoginEnabled && !$loginPageId) {
+			// Insert the login page into the database
+			$loginPageId = wp_insert_post(
+				array(
+					'post_title' => 'Login',
+					'post_content' => $workspaceId ? '<login-form tenant-id="' . $workspaceId . '"' . ($isPantheon ? ' redirect="/post-login" redirect-on-load-if-logged-in="true"' : '') . '></login-form>' : DEFAULT_PAGE_CONTENT,
+					'post_status' => 'publish',
+					'post_author' => 1,
+					'post_type' => 'page',
+				)
+			);
+			update_option('userfront-login-page-id', $loginPageId);
+		} else {
+			// Delete the login page
+			wp_delete_post($loginPageId, true);
+			update_option('userfront-login-page-id', null);
+		}
+
+		if ($isSignupEnabled && $signupPageId) {
+			// Update the signup page with the new tenant ID
+			wp_update_post(
+				array(
+					'ID' => $signupPageId,
+					'post_content' => $workspaceId ? '<signup-form tenant-id="' . $workspaceId . '"></signup-form>' : DEFAULT_PAGE_CONTENT
+				)
+			);
+		} else if ($isSignupEnabled && !$signupPageId) {
+			// Insert the signup page into the database
+			$signupPageId = wp_insert_post(
+				array(
+					'post_title' => 'Signup',
+					'post_content' => $workspaceId ? '<signup-form tenant-id="' . $workspaceId . '"></signup-form>' : DEFAULT_PAGE_CONTENT,
+					'post_status' => 'publish',
+					'post_author' => 1,
+					'post_type' => 'page',
+				)
+			);
+			update_option('userfront-signup-page-id', $signupPageId);
+		} else {
+			// Delete the signup page
+			wp_delete_post($signupPageId, true);
+			update_option('userfront-signup-page-id', null);
+		}
+
+		if ($isResetPasswordEnabled && $resetPasswordPageId) {
+			// Update the reset password page with the new tenant ID
+			wp_update_post(
+				array(
+					'ID' => $resetPasswordPageId,
+					'post_content' => $workspaceId ? '<password-reset-form tenant-id="' . $workspaceId . '"></password-reset-form>' : DEFAULT_PAGE_CONTENT
+				)
+			);
+		} else if ($isResetPasswordEnabled && !$resetPasswordPageId) {
+			// Insert the reset password page into the database
+			$resetPasswordPageId = wp_insert_post(
+				array(
+					'post_title' => 'Reset Password',
+					'post_content' => $workspaceId ? '<password-reset-form tenant-id="' . $workspaceId . '"></password-reset-form>' : DEFAULT_PAGE_CONTENT,
+					'post_status' => 'publish',
+					'post_author' => 1,
+					'post_type' => 'page',
+				)
+			);
+			update_option('userfront-reset-password-page-id', $resetPasswordPageId);
+		} else {
+			// Delete the reset password page
+			wp_delete_post($resetPasswordPageId, true);
+			update_option('userfront-reset-password-page-id', null);
 		}
 
 		$success = true;
@@ -707,7 +639,9 @@ function display_userfront_menu_page()
 		echo '<div class="notice notice-success is-dismissible"><p>Settings saved successfully.</p></div>';
 	}
 
-	echo '<form method="post" action="options.php">';
+	echo '<form id="userfront" id="userfront" method="post" action="options.php">';
+
+	wp_nonce_field(ACTION, NONCE);
 
 	do_settings_sections('userfront-options-page');
 	settings_fields('userfront');
@@ -724,15 +658,36 @@ register_activation_hook(
 );
 function activation_hook()
 {
-	// Create the database table
-	wp_create_database_table();
-	// Insert the default record into the database
-	wp_insert_record_into_table();
+	register_setting(
+		'userfront',
+		'userfront-login-page-id',
+		[
+			'type' => 'string',
+			'label' => 'Login Page ID',
+		]
+	);
+	register_setting(
+		'userfront',
+		'userfront-signup-page-id',
+		[
+			'type' => 'string',
+			'label' => 'Signup Page ID'
+		]
+	);
+	register_setting(
+		'userfront',
+		'userfront-reset-password-page-id',
+		[
+			'type' => 'string',
+			'label' => 'Reset Password Page ID'
+		]
+	);
+
 	// Insert the login page into the database
 	$loginPageId = wp_insert_post(
 		array(
 			'post_title' => 'Login',
-			'post_content' => 'Add your Workspace ID to <a href="/wp-admin/admin.php?page=userfront" target="_blank">the plugin settings</a> then reload this page. ☺️',
+			'post_content' => DEFAULT_PAGE_CONTENT,
 			'post_status' => 'publish',
 			'post_author' => 1,
 			'post_type' => 'page',
@@ -742,7 +697,7 @@ function activation_hook()
 	$signupPageId = wp_insert_post(
 		array(
 			'post_title' => 'Signup',
-			'post_content' => 'Add your Workspace ID to <a href="/wp-admin/admin.php?page=userfront" target="_blank">the plugin settings</a> then reload this page. ☺️',
+			'post_content' => DEFAULT_PAGE_CONTENT,
 			'post_status' => 'publish',
 			'post_author' => 1,
 			'post_type' => 'page',
@@ -752,18 +707,15 @@ function activation_hook()
 	$resetPasswordPageId = wp_insert_post(
 		array(
 			'post_title' => 'Reset Password',
-			'post_content' => 'Add your Workspace ID to <a href="/wp-admin/admin.php?page=userfront" target="_blank">the plugin settings</a> then reload this page. ☺️',
+			'post_content' => DEFAULT_PAGE_CONTENT,
 			'post_status' => 'publish',
 			'post_author' => 1,
 			'post_type' => 'page',
 		)
 	);
-	// Save the page IDs to the database
-	wp_update_record_in_table(
-		$loginPageId,
-		$signupPageId,
-		$resetPasswordPageId
-	);
+	update_option('userfront-login-page-id', $loginPageId);
+	update_option('userfront-signup-page-id', $signupPageId);
+	update_option('userfront-reset-password-page-id', $resetPasswordPageId);
 }
 
 // Fires after a plugin has been deactivated
@@ -782,15 +734,9 @@ function deactivation_hook()
 	delete_option('userfront-signup');
 	delete_option('userfront-reset-password');
 	delete_option('userfront-account-creation');
-	// Delete the pages
-	$values = wp_select_records_from_table();
-	foreach ($values as $value) {
-		wp_delete_post($value->loginPageId, true);
-		wp_delete_post($value->signupPageId, true);
-		wp_delete_post($value->resetPasswordPageId, true);
-	}
-	// Delete the database table
-	wp_delete_table();
+	delete_option('userfront-login-page-id');
+	delete_option('userfront-signup-page-id');
+	delete_option('userfront-reset-password-page-id');
 }
 
 function enqueue_userfront_script()
