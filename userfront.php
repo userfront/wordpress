@@ -4,13 +4,13 @@
  * 
  * @package UserfrontWordpress
  * @author Userfront
- * @version 1.2.2
+ * @version 1.2.3
  * 
  * @wordpress-plugin
  * Plugin Name: Userfront Auth
  * Plugin URI: https://github.com/userfront/wordpress
  * Description: Userfront is a premier auth & identity platform. Install full-fledged authentication and authorization with 2FA/MFA and OAuth to WordPress within minutes. 
- * Version: 1.2.2
+ * Version: 1.2.3
  * Author: Userfront 
  * Author URI: https://userfront.com
  * License: MIT
