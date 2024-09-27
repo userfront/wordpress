@@ -10,60 +10,15 @@
  * Plugin Name: Userfront Auth
  * Plugin URI: https://github.com/userfront/wordpress
  * Description: Userfront is a premier auth & identity platform. Install full-fledged authentication and authorization with 2FA/MFA and OAuth to WordPress within minutes. 
- * Author: Userfront 
  * Version: 1.2.2
+ * Author: Userfront 
  * Author URI: https://userfront.com
+ * License: MIT
  */
 
 /**
  * Helpers
  */
-
-// Fetch data from a URL
-function fetch($url, $method, $data = false, $headers = array())
-{
-	$ch = curl_init();
-
-	switch ($method) {
-		case 'POST':
-			curl_setopt($ch, CURLOPT_POST, 1);
-			if ($data) {
-				curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
-			}
-			break;
-
-		case 'PUT':
-			curl_setopt($ch, CURLOPT_PUT, 1);
-			curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PUT');
-			if ($data) {
-				curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
-			}
-			break;
-
-		case 'DELETE':
-			curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'DELETE');
-			if ($data) {
-				curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
-			}
-			break;
-
-		default:
-			if ($data) {
-				$url = sprintf('%s?%s', $url, http_build_query($data));
-			}
-	}
-
-	curl_setopt($ch, CURLOPT_HTTPHEADER, array_merge($headers, array('Content-Type: application/json')));
-
-	curl_setopt($ch, CURLOPT_URL, $url);
-	curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-
-	$result = curl_exec($ch);
-
-	curl_close($ch);
-
-	return $result;
-}
 
 // Add redirect header and kill the script
 function redirect($url, $permanent = false)
@@ -90,15 +45,24 @@ function delete_cookie($cookieName, $useRealCookieName = true)
 function get_self($jwt)
 {
 	// TODO: Use jwt.verify instead
-	$url = 'https://api.userfront.com/v0/self';
-	$data = fetch($url, 'GET', false, array('Authorization: Bearer ' . $jwt));
+	$data = wp_remote_get('https://api.userfront.com/v0/self', array(
+		'headers' => array(
+			'Authorization' => 'Bearer ' . $jwt
+		)
+	));
 	return json_decode($data);
 }
 function update_self($jwt, $data)
 {
-	$url = 'https://api.userfront.com/v0/self';
 	$data_json = json_encode($data);
-	$data = fetch($url, 'PUT', $data_json, array('Authorization: Bearer ' . $jwt));
+	$data = wp_remote_request(
+		'https://api.userfront.com/v0/self',
+		array(
+			'method' => 'PUT',
+			'headers' => array('Authorization' => 'Bearer ' . $jwt),
+			'body' => $data_json,
+		)
+	);
 	return json_decode($data);
 }
 
@@ -278,7 +242,7 @@ function init()
 						prev[name] = value.join("=");
 						return prev;
 					}, {});
-					["id", "refresh", "access"].forEach(key => document.cookie = "STYXKEY_" + key + "_' . $workspaceId . '=" + cookies[key + ".' . $workspaceId . '"]);
+					["id", "refresh", "access"].forEach(key => document.cookie = "STYXKEY_" + key + "_' . esc_js($workspaceId) . '=" + cookies[key + ".' . esc_js($workspaceId) . '"]);
 					window.location.href = "/dashboard";
 				}
 				updateCookies();
@@ -576,13 +540,13 @@ function display_userfront_settings_message()
 function display_userfront_workspace_field()
 {
 	$value = get_option('userfront-workspaceId');
-	echo '<input type="text" id="userfront-workspaceId" name="userfront-workspaceId" value="' . $value . '" class="regular-text" />';
+	echo '<input type="text" id="userfront-workspaceId" name="userfront-workspaceId" value="' . esc_html($value) . '" class="regular-text" />';
 }
 
 function display_userfront_organization_field()
 {
 	$value = get_option('userfront-organizationId');
-	echo '<input type="text" id="userfront-organizationId" name="userfront-organizationId" value="' . $value . '" class="regular-text" />';
+	echo '<input type="text" id="userfront-organizationId" name="userfront-organizationId" value="' . esc_html($value) . '" class="regular-text" />';
 }
 
 function display_login_checkbox()
