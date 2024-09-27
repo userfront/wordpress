@@ -5,7 +5,7 @@ Requires at least: 6.6.2
 Requires PHP: 7.4
 License: MIT
 License URI: https://github.com/userfront/wordpress/blob/main/license.txt
-Stable tag: 1.2.0
+Stable tag: 1.2.2
 Contributors: userfront
 
 == Description ==
