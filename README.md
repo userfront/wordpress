@@ -67,6 +67,19 @@ If you make customizations to your toolkit theme and appearance in the [Userfron
 
 If you're experiencing miscellaneous issues with the render and behavior of this plugin, try to disable other plugins as there could be conflicts between them.
 
+### Cookies and caching
+
+Some hosting platforms cache cookies. For Pantheon, we've worked around this with the `STYXKEY_` prefix. If you're experiencing logout issues, try to disable caching of the Userfront cookies (`access.{workspace id}`, `refresh.{workspace id}`, `id.{workspace id}`) or contact your hosting provider.
+
+[Working with Cookies on Pantheon › Cache-Busting Cookies](https://docs.pantheon.io/cookies#cache-busting-cookies)
+[How to Use Varnish at Cloudways ›How to Exclude URLs and Cookies in Varnish](https://support.cloudways.com/en/articles/5496342-how-to-use-varnish-at-cloudways#h_289d92cc87)
+
+Please reach out and let us know about other hosting platforms!
+
+### Login links
+
 The automatically generated Login page could be effected by your permalink structure. This could break Login Links via email if your permalink structure involves a redirect because WordPress will drop any query parameters, including the required `uuid` and `token`. Try changing the permalink structure to `/%postname%/` in your WordPress Admin Dashboard under Settings > Permalink Settings > Permalink structure.
 
-If this is not an option for you or if you're you experiencing other problems, please [contact us](https://userfront.com/contact).
+### More
+
+If you're experiencing other problems, please [contact us](https://userfront.com/contact).
